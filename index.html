@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Ender Slicer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Slicer">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#121a2b">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{"imports":{"three":"./lib/three.module.min.js"}}</script>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand"><img src="icon-192.png" alt=""><span>Ender Slicer</span></div>
+    <div class="spacer"></div>
+    <label class="btn" for="file">Modell laden</label>
+    <input id="file" type="file" accept=".stl,.3mf,.STL,.3MF" hidden>
+    <button class="btn primary" id="btnSlice" disabled>Slicen</button>
+  </header>
+
+  <main>
+    <section id="viewer">
+      <canvas id="gl"></canvas>
+      <div id="drop"><div><b>STL oder 3MF laden</b><br>Tippe oben auf „Modell laden“<br>oder zieh die Datei hierher</div></div>
+      <div id="overlay" hidden><div class="bar"><div id="barFill"></div></div><div id="overlayText">…</div></div>
+      <div id="toast" hidden></div>
+      <div id="layerBox" hidden>
+        <input id="layerSlider" type="range" min="1" max="1" value="1" orient="vertical">
+        <div id="layerLabel">1</div>
+      </div>
+      <div id="viewTabs">
+        <button id="tabModel" class="on">Modell</button>
+        <button id="tabPreview" disabled>Vorschau</button>
+      </div>
+    </section>
+
+    <aside id="panel">
+      <details open id="secModel">
+        <summary>Modell</summary>
+        <div id="modelInfo" class="muted">Noch kein Modell geladen.</div>
+        <div class="grid2">
+          <label>Skalierung %<input type="number" id="scale" value="100" min="1" max="1000" step="1" inputmode="decimal"></label>
+          <label>Drehen um Z °<input type="number" id="rz" value="0" step="15" inputmode="decimal"></label>
+        </div>
+        <div class="row">
+          <button class="btn small" data-rot="x">X +90°</button>
+          <button class="btn small" data-rot="y">Y +90°</button>
+          <button class="btn small" data-rot="z">Z +90°</button>
+          <button class="btn small" id="btnReset">Zurücksetzen</button>
+        </div>
+      </details>
+
+      <details open id="secPrinter">
+        <summary>Drucker &amp; Klipper</summary>
+        <label>Profil
+          <select id="profile"><option value="ender3v3se">Creality Ender 3 V3 SE (220×220×250)</option></select>
+        </label>
+        <label>Moonraker-Adresse
+          <input type="text" id="host" placeholder="z. B. 192.168.1.50:81" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url">
+        </label>
+        <label>API-Key (nur falls nötig)
+          <input type="password" id="apikey" autocapitalize="off" autocorrect="off" spellcheck="false">
+        </label>
+        <label class="check"><input type="checkbox" id="startPrint"> Nach dem Upload direkt drucken</label>
+        <div class="row">
+          <button class="btn small" id="btnTest">Verbindung testen</button>
+          <span id="connState" class="muted"></span>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Qualität</summary>
+        <div class="grid2">
+          <label>Schichthöhe mm
+            <select id="layerHeight"><option>0.12</option><option>0.16</option><option selected>0.2</option><option>0.24</option><option>0.28</option></select>
+          </label>
+          <label>Wände<input type="number" id="wallCount" value="2" min="1" max="8" inputmode="numeric"></label>
+          <label>Deckelschichten<input type="number" id="topLayers" value="5" min="0" max="20" inputmode="numeric"></label>
+          <label>Bodenschichten<input type="number" id="bottomLayers" value="4" min="0" max="20" inputmode="numeric"></label>
+        </div>
+      </details>
+
+      <details open>
+        <summary>Füllung &amp; Haftung</summary>
+        <div class="grid2">
+          <label>Füllung %<input type="number" id="infillDensity" value="15" min="0" max="100" inputmode="numeric"></label>
+          <label>Muster
+            <select id="infillPattern"><option value="grid">Gitter</option><option value="triangles">Dreiecke</option><option value="lines">Linien</option></select>
+          </label>
+          <label>Haftung
+            <select id="adhesion"><option value="skirt">Skirt</option><option value="brim">Brim</option><option value="none">Keine</option></select>
+          </label>
+          <label>Brim-Breite mm<input type="number" id="brimWidth" value="5" min="1" max="20" inputmode="decimal"></label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Temperatur &amp; Lüfter</summary>
+        <div class="grid2">
+          <label>Düse 1. Schicht °C<input type="number" id="firstNozzleTemp" value="215" inputmode="numeric"></label>
+          <label>Düse °C<input type="number" id="nozzleTemp" value="210" inputmode="numeric"></label>
+          <label>Bett 1. Schicht °C<input type="number" id="firstBedTemp" value="60" inputmode="numeric"></label>
+          <label>Bett °C<input type="number" id="bedTemp" value="60" inputmode="numeric"></label>
+          <label>Lüfter %<input type="number" id="fanSpeed" value="100" min="0" max="100" inputmode="numeric"></label>
+          <label>Lüfter ab Schicht<input type="number" id="fanStartLayer" value="2" min="0" inputmode="numeric"></label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Geschwindigkeit &amp; Retraction</summary>
+        <div class="grid2">
+          <label>1. Schicht mm/s<input type="number" id="speedFirstLayer" value="30" inputmode="numeric"></label>
+          <label>Außenwand mm/s<input type="number" id="speedOuterWall" value="100" inputmode="numeric"></label>
+          <label>Innenwand mm/s<input type="number" id="speedInnerWall" value="150" inputmode="numeric"></label>
+          <label>Füllung mm/s<input type="number" id="speedInfill" value="180" inputmode="numeric"></label>
+          <label>Solide Flächen mm/s<input type="number" id="speedSolid" value="120" inputmode="numeric"></label>
+          <label>Leerfahrt mm/s<input type="number" id="speedTravel" value="250" inputmode="numeric"></label>
+          <label>Retraction mm<input type="number" id="retractLength" value="0.8" step="0.1" inputmode="decimal"></label>
+          <label>Retraction mm/s<input type="number" id="retractSpeed" value="35" inputmode="numeric"></label>
+          <label>Z-Hop mm<input type="number" id="zHop" value="0" step="0.1" inputmode="decimal"></label>
+          <label>Fluss %<input type="number" id="flow" value="100" step="1" inputmode="decimal"></label>
+        </div>
+      </details>
+
+      <details>
+        <summary>Start- &amp; End-G-Code</summary>
+        <p class="muted small">Platzhalter: <code>[first_nozzle_temp]</code> <code>[first_bed_temp]</code> <code>[nozzle_temp]</code> <code>[bed_temp]</code> <code>[bed_x]</code> <code>[bed_y]</code>. Orca-Platzhalter wie <code>[nozzle_temperature_initial_layer]</code> werden ebenfalls ersetzt.</p>
+        <label>Start-G-Code<textarea id="startGcode" rows="10" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea></label>
+        <label>End-G-Code<textarea id="endGcode" rows="8" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea></label>
+        <button class="btn small" id="btnDefaultGcode">Standardwerte wiederherstellen</button>
+      </details>
+
+      <div id="result" hidden>
+        <h3>Ergebnis</h3>
+        <div id="stats"></div>
+        <div class="row">
+          <button class="btn" id="btnDownload">G-Code speichern</button>
+          <button class="btn primary" id="btnUpload">Zu Klipper hochladen</button>
+        </div>
+      </div>
+
+      <p class="muted small foot">Läuft komplett im Browser – nichts wird an einen Server geschickt, außer dem Upload an deinen Drucker.</p>
+    </aside>
+  </main>
+</div>
+
+<script src="lib/fflate.js"></script>
+<script src="loader.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
